@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ai-tutor
 
-## Getting Started
+An AI tutoring web app on Next.js 16 App Router, React 19 and Tailwind v4: a Mastra agent
+(Bartholomew, a butler who keeps your to-do list and declines everything else) served to a
+CopilotKit chat over AG-UI, behind Better Auth email/password sign-in, over a Drizzle/SQLite
+persistence layer, with a Vitest and Playwright test harness. The root package is also an npm
+workspace root for `cli/` and `packages/api-contract/`.
 
-First, run the development server:
+This repository is the starter code for session 4 of the classroom at
+https://github.com/rstropek/2026-claude-classroom, where `storybook-04.md` is the script for
+the session.
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Fill in `OPENROUTER_API_KEY` with your own OpenRouter key and `BETTER_AUTH_SECRET` with the
+output of `openssl rand -base64 32`. Then create the database and start the app:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run db:migrate
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open http://localhost:3000 and sign up. The SQLite file under `data/` is disposable, and
+`db:migrate` recreates it.
 
-## Learn More
+## Tests
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm test          # Vitest, single run
+npm run test:e2e  # Playwright, Chromium, on its own dev server
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`npm run test:e2e:llm` runs the one spec that talks to the model, so it spends OpenRouter
+credit. It is excluded from `npm run test:e2e`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Code tour
 
-## Deploy on Vercel
+The repository carries a VS Code CodeTour that walks the path from an agent tool call to the
+component it draws in the chat transcript.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Install the CodeTour extension (`vsls-contrib.codetour`); VS Code offers it on open.
+2. Open this directory as the workspace root, not a parent folder, or the tour's paths will
+   not resolve.
+3. In the CodeTour view of the explorer sidebar, start "Controlled generative UI:
+   useRenderTool".
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Architecture
+
+`AGENTS.md` is the reference: one section per area (app code, persistence, auth, REST API,
+agent, CLI, MCP, styling, tests) with the decisions and the traps behind each one. Read it
+before changing anything.

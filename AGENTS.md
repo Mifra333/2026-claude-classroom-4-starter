@@ -154,3 +154,4 @@ The root package is also an npm workspace root for `cli/` (`ai-tutor-cli`, the `
 - Update this file in the same change set whenever a change invalidates a line here or teaches a costly lesson.
 - Prefer deleting over adding and pointers over prose; drop anything a reader would learn just by opening the file a bullet points to.
 - One sentence per bullet, current state only, no history or changelog.
+- `.tours/use-render-tool.tour` (the CodeTour the README points at) anchors by line number into `app/page.tsx`, `lib/todo-tools.ts`, `lib/tutor.ts`, the CopilotKit route, three `components/` files and `tests/unit/todo-tool-calls.test.tsx`, so re-check its `line` values when those statements move.
