@@ -5,6 +5,10 @@
       "command": "npx",
       "args": ["ai-tutor", "mcp", "--stdio"],
       "env": {}
+    },
+    "copilotkit-docs": {
+      "type": "http",
+      "url": "https://mcp.copilotkit.ai/mcp"
     }
   }
 }

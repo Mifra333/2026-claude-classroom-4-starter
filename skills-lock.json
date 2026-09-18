@@ -1,29 +1,11 @@
 {
   "version": 1,
   "skills": {
-    "copilotkit-agui": {
-      "source": "CopilotKit/CopilotKit",
+    "copilotkit": {
+      "source": "copilotkit/copilotkit",
       "sourceType": "github",
-      "skillPath": "skills/copilotkit-agui/SKILL.md",
-      "computedHash": "67f23c8448e4b3b2b467ee9ac3659686b3d8315ed2c73a201810018b06947bd7"
-    },
-    "copilotkit-debug": {
-      "source": "CopilotKit/CopilotKit",
-      "sourceType": "github",
-      "skillPath": "skills/copilotkit-debug/SKILL.md",
-      "computedHash": "44d003cc893a02d31bd87efe067359bb5ac5294cf86b65f26806e1cbd2da78d5"
-    },
-    "copilotkit-develop": {
-      "source": "CopilotKit/CopilotKit",
-      "sourceType": "github",
-      "skillPath": "skills/copilotkit-develop/SKILL.md",
-      "computedHash": "2ef1ac515ab17171266477c2c131f9956bb32ebfd417c9a3225187d17d9f73ea"
-    },
-    "copilotkit-setup": {
-      "source": "CopilotKit/CopilotKit",
-      "sourceType": "github",
-      "skillPath": "skills/copilotkit-setup/SKILL.md",
-      "computedHash": "dedd4e6c60a1e0e5ab2e76c66e2120b7012655d5918091984c8384a18b6bef22"
+      "skillPath": "skills/copilotkit/SKILL.md",
+      "computedHash": "e9c9c2019065cb5947fc2944dea83f42cba0bddd643387dde5944ab63be1cc14"
     },
     "find-docs": {
       "source": "upstash/context7",
