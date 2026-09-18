@@ -80,7 +80,8 @@ The root package is also an npm workspace root for `cli/` (`ai-tutor-cli`, the `
 - Each tool declares `requestContextSchema`, so a call arriving without a `userId` returns a validation error object instead of throwing or running unscoped.
 - Thread ids are `tutor:<userId>` (`tutorThreadId`), rendered into the page from the session so a reload rejoins the same conversation; Mastra rejects running a stored thread under another resource with `AGENT_MEMORY_THREAD_RESOURCE_MISMATCH`, which does not itself authorize CopilotKit's in-memory replay endpoints.
 - The route session-gates GET and POST before creating the bridge or invoking the runtime, but its static tutor import initializes Mastra before the handler runs.
-- Use `createCopilotRuntimeHandler` from `@copilotkit/runtime/v2`; the package's own `skills/runtime/` docs flag the Express and Hono adapters as "avoid at all costs".
+- Use `createCopilotRuntimeHandler` from `@copilotkit/runtime/v2`, not the Express or Hono adapters.
+- CopilotKit answers come from the `copilotkit` skill, which carries no API detail itself and sends you to the `copilotkit-docs` MCP server registered in `.mcp.json`.
 - `@copilotkit/react-core/v2` is the whole client surface (`CopilotKit`, `CopilotChat`, `styles.css`) — `@copilotkit/react-ui` and the package roots are v1 and do not work with it.
 - The CopilotKit Inspector is on by default in development (`enableInspector` stays unset; `showDevConsole` is deprecated and controls nothing). Its `<cpk-web-inspector>` launcher would sit on the header's sign-out button, so `app/globals.css` shifts the host down with a margin.
 - `OPENROUTER_BASE_URL` (optional, see `.env.example`) routes the model traffic through a local proxy; with a custom `url` Mastra's model router no longer reads `OPENROUTER_API_KEY` itself, which is why `lib/tutor.ts` passes `apiKey` explicitly.
