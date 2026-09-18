@@ -9,7 +9,7 @@
     },
     {
       "file": "app/page.tsx",
-      "line": 26,
+      "line": 30,
       "title": "Mount: what the server hands down",
       "description": "`app/page.tsx` is a Server Component. It gates on the session, then renders the client-only `<Chat>` with three props.\n\n**Key point:** `agentId` is the registry key of the one Mastra agent, `threadId` is `tutor:<userId>` derived from the verified session rather than chosen by the browser, and `initialTodos` is read on the server so the sidebar has content on first paint.\n\nEverything after this line runs in the browser."
     },

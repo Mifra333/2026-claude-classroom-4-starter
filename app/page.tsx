@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Chat } from "@/components/chat";
 import { SignOutButton } from "@/components/sign-out-button";
-import { PageHeader } from "@/components/ui/page-header";
+import { HeaderLink, PageHeader } from "@/components/ui/page-header";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { listTodosFor } from "@/lib/todo-tools";
@@ -16,7 +16,11 @@ export default async function Home() {
 
   return (
     <>
-      <PageHeader title="Bartholomew" subtitle={session.user.name}>
+      <PageHeader
+        title="Bartholomew"
+        subtitle={session.user.name}
+        nav={<HeaderLink href="/projects/new">New project</HeaderLink>}
+      >
         <SignOutButton />
       </PageHeader>
       {/* `flex`, not just `flex-1`: the chat sizes itself by stretching, and a

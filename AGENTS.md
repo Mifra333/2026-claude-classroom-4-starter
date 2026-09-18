@@ -39,6 +39,17 @@ The root package is also an npm workspace root for `cli/` (`ai-tutor-cli`, the `
 - `components/todo-tool-calls.tsx` registers one `useRenderTool` per tool for the transcript (status is camelCase `inProgress`/`executing`/`complete`, and `parameters` is partial until the arguments finish streaming).
 - `lib/tool-result.ts` decodes the JSON text AG-UI puts on a tool result; it stays out of the component because importing `@copilotkit/react-core/v2` in a Vitest file fails on that package's CSS side effect.
 
+## Project wizard — `app/projects/new`, `components/project-wizard.tsx`, `lib/project.ts`
+
+- `/projects/new` is a Server Component gated like `/`, and it renders `PageHeader` plus the client `ProjectWizard` with `today` so the planning date comes from the server clock.
+- `lib/project.ts` is plain (no `server-only`, no db) so the client component, a Server Component and Vitest all import it: `projectSchema`/`Project`, `emptyProject`, `projectPatchSchema`/`ProjectPatch`, `applyProjectPatch`, `describeChanges`.
+- `applyProjectPatch` owns every rule — real calendar dates, end not before start, effort above zero — and a field that fails keeps its old value and reports a message while the rest of the same patch still lands.
+- `projectPatchSchema`'s `.describe()` text is written for a model that will fill it as tool input, so it states the date format and the person-day unit.
+- Nothing is persisted: the project lives in `useState` and a reload starts from `emptyProject`.
+- The wizard is a scaffold with no agent behind it — the marked comment block in `onSubmit` is the seam, and submitting only writes "Not connected to an agent yet." to the status line.
+- `PageHeader` takes an optional `nav` beside its actions and exports `HeaderLink` for it, which is how `/` links to the wizard and the wizard links back.
+- `tests/unit/project.test.ts` covers the rules and `tests/e2e/project-wizard.spec.ts` covers the gate and the submit, neither with a model call.
+
 ## Persistence — `lib/db.ts`, `lib/schema.ts`, `lib/auth-schema.ts`, `drizzle.config.ts`, `drizzle/`
 
 - `lib/db.ts` is `server-only` and owns the cached application Drizzle connection; the auth CLI and tests construct separate connections.
