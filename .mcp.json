@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ai-tutor": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["ai-tutor", "mcp", "--stdio"],
+      "env": {}
+    }
+  }
+}
