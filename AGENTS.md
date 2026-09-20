@@ -132,6 +132,7 @@ The root package is also an npm workspace root for `cli/` (`ai-tutor-cli`, the `
 - `lib/mcp-app-views.ts` is `server-only`, and its `readView(name)` returns one built file, rejects a name outside `[a-z0-9-]+` before it reaches the filesystem, and names the build command when the file is missing.
 - `mcp-apps/dist/` is git-ignored, which also keeps Biome off the bundle because `biome.json` reads the VCS ignore file.
 - `@modelcontextprotocol/ext-apps` 2.x is a root dependency while `@copilotkit/react-core` nests its own 1.7.5; `npm ls @modelcontextprotocol/ext-apps` shows both and neither shadows the other.
+- `.agents/skills/add-app-to-server/SKILL.md` (Claude copy under `.claude/skills/`) is the SDK's own guide to serving a view from an MCP server, so read it before wiring a view to a tool — its build-pipeline section describes a standalone server and is superseded here by the two bullets above.
 
 ## Tests — `tests/unit`, `tests/integration` (Vitest), `tests/e2e` (Playwright)
 
