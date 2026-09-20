@@ -7,9 +7,12 @@
     "cli"
   ],
   "scripts": {
+    "predev": "npm run build:views",
     "dev": "next dev",
+    "prebuild": "npm run build:views",
     "build": "next build",
     "start": "next start",
+    "build:views": "node scripts/build-views.mjs",
     "lint": "biome check",
     "format": "biome format --write",
     "test": "vitest run",
@@ -34,6 +37,7 @@
     "@mastra/core": "^1.66.0",
     "@mastra/libsql": "^1.22.5",
     "@mastra/memory": "^1.29.0",
+    "@modelcontextprotocol/ext-apps": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "ai-tutor-api-contract": "*",
     "better-auth": "^1.7.4",
@@ -60,6 +64,8 @@
     "jsdom": "^30.0.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^5.0.0"
   }
 }

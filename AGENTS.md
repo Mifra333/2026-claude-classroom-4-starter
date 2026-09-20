@@ -122,6 +122,17 @@ The root package is also an npm workspace root for `cli/` (`ai-tutor-cli`, the `
 - `app/consent/page.tsx` gates on the session and shows the client (named by its own metadata, so the `client_id` URL is displayed too), the redirect URI and the scopes before `authClient.oauth2.consent`.
 - A resource-scoped scope must be listed in `mcpOptions().scopes` and described in `components/oauth-consent.tsx`; `offline_access` is not requested by the challenge because MCP clients add it themselves when the server advertises it.
 
+## MCP App views — `mcp-apps/`, `scripts/build-views.mjs`, `lib/mcp-app-views.ts`
+
+- A view is a folder `mcp-apps/<name>/` with an `index.html` entry beside whatever it imports, and `npm run build:views` bundles each one into a single self-contained `mcp-apps/dist/<name>.html`.
+- One file is the requirement, not a preference: the host serves a view from a `ui://` resource into a sandboxed iframe with a default-deny CSP, so the page never gets a second request and anything left un-inlined is gone.
+- The script drives Vite's JS API with `configFile: false`, because a `vite.config.*` at the repository root would also be picked up by Vitest, which has its own config.
+- It runs one build per view: several inputs in one Rollup build emit shared chunks that the pages then import, which is exactly the second request the sandbox refuses.
+- `predev` and `prebuild` call it, but `next dev` does not watch `mcp-apps/`, so re-run `npm run build:views` by hand after editing a view.
+- `lib/mcp-app-views.ts` is `server-only`, and its `readView(name)` returns one built file, rejects a name outside `[a-z0-9-]+` before it reaches the filesystem, and names the build command when the file is missing.
+- `mcp-apps/dist/` is git-ignored, which also keeps Biome off the bundle because `biome.json` reads the VCS ignore file.
+- `@modelcontextprotocol/ext-apps` 2.x is a root dependency while `@copilotkit/react-core` nests its own 1.7.5; `npm ls @modelcontextprotocol/ext-apps` shows both and neither shadows the other.
+
 ## Tests — `tests/unit`, `tests/integration` (Vitest), `tests/e2e` (Playwright)
 
 - Vitest is jsdom + Testing Library and only picks up `tests/{unit,integration}/**/*.test.{ts,tsx}`; async Server Components are unsupported there, so cover those with e2e instead.
@@ -132,6 +143,7 @@ The root package is also an npm workspace root for `cli/` (`ai-tutor-cli`, the `
 - The auth test builds its own instance from `authOptions` with the `testUtils()` plugin and an explicit `secret`/`baseURL`, because Vitest does not load `.env`.
 - `tests/e2e/auth.spec.ts` does hit `data/app.db`, so it signs up a `Date.now()`-stamped email; `playwright.config.ts` also overrides `BETTER_AUTH_URL` onto its own port.
 - `tests/unit/mcp-route.test.ts` imports the real MCP and discovery routes like the todos API test and covers the 401 challenge and both metadata documents; the token-verified path needs the app's own JWKS over HTTP, so it has no unit test.
+- `tests/unit/mcp-app-views.test.ts` passes `readView` a temp directory, so it never depends on whether `npm run build:views` has run.
 - `tests/unit/auth.test.ts` also starts several MCP-configured instances on one fresh file at once to guard the `oauth_resource` seed race.
 - `tests/unit/copilotkit-route.test.ts` mocks `@/lib/auth`, `@/lib/tutor`, and both CopilotKit/AG-UI modules, so it covers the 401 gate and the `resourceId`/`requestContext` wiring without a model call.
 - `tests/unit/todos-api.test.ts` imports the real route handlers with `server-only` mocked and `DATABASE_URL`/`BETTER_AUTH_*` stubbed onto a temp file, and mints tokens from a separate testUtils instance sharing that secret.

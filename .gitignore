@@ -56,3 +56,6 @@ next-env.d.ts
 
 # built CLI
 /cli/dist/
+
+# built MCP App views
+mcp-apps/dist/
