@@ -179,3 +179,4 @@ The root package is also an npm workspace root for `cli/` (`ai-tutor-cli`, the `
 - Prefer deleting over adding and pointers over prose; drop anything a reader would learn just by opening the file a bullet points to.
 - One sentence per bullet, current state only, no history or changelog.
 - `.tours/use-render-tool.tour` (the CodeTour the README points at) anchors by line number into `app/page.tsx`, `lib/todo-tools.ts`, `lib/tutor.ts`, the CopilotKit route, three `components/` files and `tests/unit/todo-tool-calls.test.tsx`, so re-check its `line` values when those statements move.
+- `.tours/mcp-app-views.tour` (the second one) anchors the same way into `package.json`, `scripts/build-views.mjs`, the three `mcp-apps/todo-form/` files, `lib/mcp-app-views.ts`, `.gitignore` and `tests/unit/mcp-app-views.test.ts`.

@@ -28,6 +28,10 @@ npm run dev
 Open http://localhost:3000 and sign up. The SQLite file under `data/` is disposable, and
 `db:migrate` recreates it.
 
+`mcp-apps/` holds the views for MCP Apps, one folder per view; `npm run dev` and
+`npm run build` bundle each one into a single self-contained HTML file through
+`npm run build:views` before they start.
+
 ## Tests
 
 ```bash
@@ -40,14 +44,15 @@ credit. It is excluded from `npm run test:e2e`.
 
 ## Code tour
 
-The repository carries a VS Code CodeTour that walks the path from an agent tool call to the
-component it draws in the chat transcript.
+The repository carries two VS Code CodeTours: one walks the path from an agent tool call to
+the component it draws in the chat transcript, the other the build that turns a folder under
+`mcp-apps/` into the single HTML file an MCP host can serve.
 
 1. Install the CodeTour extension (`vsls-contrib.codetour`); VS Code offers it on open.
-2. Open this directory as the workspace root, not a parent folder, or the tour's paths will
+2. Open this directory as the workspace root, not a parent folder, or the tours' paths will
    not resolve.
 3. In the CodeTour view of the explorer sidebar, start "Controlled generative UI:
-   useRenderTool".
+   useRenderTool" or "MCP App views: one HTML file per view".
 
 ## Architecture
 
