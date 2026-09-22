@@ -1,13 +1,11 @@
 // @vitest-environment node
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { drizzle } from "drizzle-orm/libsql/node";
 import { afterAll, beforeAll, expect, test } from "vitest";
-
 import { todos, user } from "@/lib/schema";
+import { makeTempDir, removeTempDir } from "@/tests/support/temp-dir";
 
 // lib/db.ts is `server-only` and bound to DATABASE_URL, so the test builds its
 // own instance against a throwaway file to exercise the real migrations.
@@ -15,7 +13,7 @@ let dir: string;
 let db: ReturnType<typeof drizzle>;
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), "ai-tutor-db-"));
+  dir = await makeTempDir("ai-tutor-db-");
   db = drizzle({ connection: { url: `file:${join(dir, "test.db")}` } });
   await migrate(db, { migrationsFolder: "./drizzle" });
 
@@ -28,7 +26,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   db.$client.close();
-  await rm(dir, { recursive: true, force: true });
+  await removeTempDir(dir);
 });
 
 test("inserts and reads back a todo", async () => {

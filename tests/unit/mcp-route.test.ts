@@ -1,10 +1,9 @@
 // @vitest-environment node
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { drizzle } from "drizzle-orm/libsql/node";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import { makeTempDir, removeTempDir } from "@/tests/support/temp-dir";
 
 // The real routes over a throwaway file, like todos-api.test.ts: lib/auth and
 // lib/db are `server-only` and read DATABASE_URL and BETTER_AUTH_* themselves.
@@ -22,7 +21,7 @@ let resourceMetadataRoute: typeof import("@/app/.well-known/oauth-protected-reso
 let authServerMetadataRoute: typeof import("@/app/.well-known/oauth-authorization-server/api/auth/route");
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), "ai-tutor-mcp-route-"));
+  dir = await makeTempDir("ai-tutor-mcp-route-");
   const url = `file:${join(dir, "test.db")}`;
   vi.stubEnv("DATABASE_URL", url);
   vi.stubEnv("BETTER_AUTH_SECRET", "test-secret-at-least-32-characters-long");
@@ -44,7 +43,7 @@ afterAll(async () => {
   db.$client.close();
   (globalThis as { db?: typeof db }).db?.$client.close();
   vi.unstubAllEnvs();
-  await rm(dir, { recursive: true, force: true });
+  await removeTempDir(dir);
 });
 
 const initialize = (headers: Record<string, string> = {}) =>

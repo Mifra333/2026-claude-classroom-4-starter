@@ -1,17 +1,15 @@
 // @vitest-environment node
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { validateA2UIComponents } from "@ag-ui/a2ui-toolkit";
 import type { RequestContext } from "@mastra/core/request-context";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { drizzle } from "drizzle-orm/libsql/node";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
-
 import { PROGRESS_SURFACE_ID, TUTOR_CATALOG_ID } from "@/lib/progress-card";
 import * as schema from "@/lib/schema";
 import { todos, user } from "@/lib/schema";
 import { createTodoTools, tutorRequestContext } from "@/lib/todo-tools";
+import { makeTempDir, removeTempDir } from "@/tests/support/temp-dir";
 
 // Same arrangement as todo-tools.test.ts: the real statements against a
 // throwaway file, so the card's figures are read off actual rows.
@@ -23,7 +21,7 @@ const ada = tutorRequestContext("user-ada");
 const grace = tutorRequestContext("user-grace");
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), "ai-tutor-progress-card-"));
+  dir = await makeTempDir("ai-tutor-progress-card-");
   db = drizzle({ connection: { url: `file:${join(dir, "test.db")}` }, schema });
   await migrate(db, { migrationsFolder: "./drizzle" });
   tools = createTodoTools(db);
@@ -36,7 +34,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   db.$client.close();
-  await rm(dir, { recursive: true, force: true });
+  await removeTempDir(dir);
 });
 
 beforeEach(async () => {

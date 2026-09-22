@@ -1,6 +1,4 @@
 // @vitest-environment node
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cimd } from "@better-auth/cimd";
 import { mcp } from "@better-auth/mcp";
@@ -9,8 +7,8 @@ import { jwt, type TestHelpers, testUtils } from "better-auth/plugins";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { drizzle } from "drizzle-orm/libsql/node";
 import { afterAll, beforeAll, expect, test } from "vitest";
-
 import { authOptions, cimdOptions, mcpOptions } from "@/lib/auth-config";
+import { makeTempDir, removeTempDir } from "@/tests/support/temp-dir";
 
 // The production instance in lib/auth.ts is `server-only` and bound to
 // DATABASE_URL, so this builds the same options over a throwaway file and adds
@@ -32,7 +30,7 @@ function createTestAuth(database: ReturnType<typeof drizzle>) {
 }
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), "ai-tutor-auth-"));
+  dir = await makeTempDir("ai-tutor-auth-");
   db = drizzle({ connection: { url: `file:${join(dir, "auth.db")}` } });
   await migrate(db, { migrationsFolder: "./drizzle" });
 
@@ -42,7 +40,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   db.$client.close();
-  await rm(dir, { recursive: true, force: true });
+  await removeTempDir(dir);
 });
 
 test("sign-up creates the user", async () => {

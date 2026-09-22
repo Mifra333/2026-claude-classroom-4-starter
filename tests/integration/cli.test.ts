@@ -1,8 +1,7 @@
 // @vitest-environment node
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { access, readFile, rm, stat } from "node:fs/promises";
 import { createServer } from "node:net";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
@@ -16,6 +15,7 @@ import { drizzle } from "drizzle-orm/libsql/node";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 import { authOptions, deviceAuthorizationOptions } from "@/lib/auth-config";
+import { makeTempDir, removeTempDir } from "@/tests/support/temp-dir";
 
 // Drives the built `ai-tutor` binary against a real `next dev` on a spare port,
 // over a throwaway database and config directory. The browser half of the
@@ -25,6 +25,13 @@ import { authOptions, deviceAuthorizationOptions } from "@/lib/auth-config";
 
 const root = process.cwd();
 const secret = "cli-test-secret-at-least-32-characters-long";
+
+// Windows has neither `#!` lines nor an executable bit, so a POSIX shim in
+// `node_modules/.bin` is not a runnable program there and `npm` is `npm.cmd`.
+// It has no process groups to signal either. Everything below that starts or
+// stops a program therefore has a Windows arm; the CLI under test is spawned
+// as `process.execPath` already and needs none.
+const onWindows = process.platform === "win32";
 
 let dir: string;
 let baseURL: string;
@@ -139,11 +146,18 @@ async function loginAs(userId: string) {
 }
 
 beforeAll(async () => {
-  await promisify(execFile)("npm", ["run", "build", "-w", "ai-tutor-cli"], {
-    cwd: root,
-  });
+  // cmd.exe is what knows that `npm` means `npm.cmd`; Node refuses to spawn a
+  // .cmd without a shell at all, and handing a shell a separate argument list
+  // is deprecated besides (DEP0190), so the Windows arm passes one command
+  // line. Every word of it is a literal — there is nothing to reinterpret.
+  const buildCli = ["run", "build", "-w", "ai-tutor-cli"];
+  await promisify(execFile)(
+    onWindows ? ["npm", ...buildCli].join(" ") : "npm",
+    onWindows ? [] : buildCli,
+    { cwd: root, shell: onWindows },
+  );
 
-  dir = await mkdtemp(join(tmpdir(), "ai-tutor-cli-"));
+  dir = await makeTempDir("ai-tutor-cli-");
   const url = `file:${join(dir, "app.db")}`;
   db = drizzle({ connection: { url } });
   await migrate(db, { migrationsFolder: "./drizzle" });
@@ -159,16 +173,22 @@ beforeAll(async () => {
     // Its own dist dir, so it can run beside `npm run dev` and Playwright's.
     NEXT_DIST_DIR: ".next-cli-test",
   };
-  server = spawn(
-    join(root, "node_modules/.bin/next"),
-    ["dev", "--port", new URL(baseURL).port],
-    {
-      cwd: root,
-      env,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
+  // `next`'s own JS entry point, which this Node runs directly; the shim in
+  // `node_modules/.bin` only exists to find it. Detached for the group kill
+  // below, which is the POSIX half of stopping the server.
+  const nextArgs = ["dev", "--port", new URL(baseURL).port];
+  const [command, args]: [string, string[]] = onWindows
+    ? [
+        process.execPath,
+        [join(root, "node_modules/next/dist/bin/next"), ...nextArgs],
+      ]
+    : [join(root, "node_modules/.bin/next"), nextArgs];
+  server = spawn(command, args, {
+    cwd: root,
+    env,
+    detached: !onWindows,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   server.stdout?.on("data", (chunk) => {
     serverLog += chunk;
   });
@@ -183,12 +203,23 @@ beforeAll(async () => {
 afterAll(async () => {
   if (server?.pid && server.exitCode === null) {
     const exited = new Promise((resolve) => server.once("exit", resolve));
-    // Detached, so the whole group goes, including next dev's worker.
-    process.kill(-server.pid, "SIGTERM");
+    if (onWindows) {
+      // No process group to signal, so taskkill walks the pid tree instead,
+      // which is what reaches next dev's worker.
+      await promisify(execFile)("taskkill", [
+        "/pid",
+        String(server.pid),
+        "/t",
+        "/f",
+      ]).catch(() => {});
+    } else {
+      // Detached, so the whole group goes, including next dev's worker.
+      process.kill(-server.pid, "SIGTERM");
+    }
     await exited;
   }
   db?.$client.close();
-  if (dir) await rm(dir, { recursive: true, force: true });
+  if (dir) await removeTempDir(dir);
 });
 
 test("login, whoami, add, list, done, logout, whoami again", async () => {
@@ -204,10 +235,14 @@ test("login, whoami, add, list, done, logout, whoami again", async () => {
   expect(loggedIn.stdout).toContain("ada@example.com");
 
   // The token file is owner-only, inside the redirected config directory.
-  expect((await stat(hostsFile())).mode & 0o777).toBe(0o600);
-  expect((await stat(join(dir, "config", "ai-tutor"))).mode & 0o777).toBe(
-    0o700,
-  );
+  // Windows has no mode bits to assert on — `chmod` there sets the read-only
+  // flag and nothing else — so this is the POSIX half of that guarantee.
+  if (!onWindows) {
+    expect((await stat(hostsFile())).mode & 0o777).toBe(0o600);
+    expect((await stat(join(dir, "config", "ai-tutor"))).mode & 0o777).toBe(
+      0o700,
+    );
+  }
   const token = JSON.parse(await readFile(hostsFile(), "utf8"))[baseURL]
     .token as string;
   expect(token).toContain(".");

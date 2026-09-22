@@ -1,8 +1,7 @@
 // @vitest-environment node
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { makeTempDir, removeTempDir } from "@/tests/support/temp-dir";
 
 // The `server-only` package resolves to its throwing build outside Next.js;
 // nothing here needs what it guards.
@@ -14,16 +13,22 @@ let dir: string;
 
 const importTutor = async () => (await import("@/lib/tutor")).mastra;
 const cachedStore = () =>
-  (globalThis as { tutorStorage?: unknown }).tutorStorage;
+  (globalThis as { tutorStorage?: { close(): Promise<void> } }).tutorStorage;
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), "ai-tutor-tutor-"));
+  dir = await makeTempDir("ai-tutor-tutor-");
   vi.stubEnv("DATABASE_URL", `file:${join(dir, "test.db")}`);
 });
 
 afterAll(async () => {
   vi.unstubAllEnvs();
-  await rm(dir, { recursive: true, force: true });
+  // Both of these are cached on `globalThis` precisely so that a hot reload
+  // keeps them, which means `vi.resetModules()` does not drop them either:
+  // they are still holding the file when the suite ends, and only they can let
+  // go. lib/tutor reaches the second one through the todo tools' `db`.
+  await cachedStore()?.close();
+  (globalThis as { db?: { $client: { close(): void } } }).db?.$client.close();
+  await removeTempDir(dir);
 });
 
 test("a dev hot reload rebuilds the agent but keeps the connection", async () => {

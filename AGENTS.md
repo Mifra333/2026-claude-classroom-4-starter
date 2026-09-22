@@ -45,6 +45,7 @@ cli/                              `ai-tutor` CLI (commander, esbuild-bundled) in
 mcp-apps/<name>/ → mcp-apps/dist/ MCP App views, each bundled into one HTML file by scripts/build-views.mjs
 drizzle/                          generated migrations
 tests/unit, tests/integration     Vitest (node env by default; *.test.tsx is jsdom)
+tests/support/                    helpers the suites share; outside the include glob, so never collected
 tests/e2e                         Playwright against its own `next dev`
 docs/mcp.md                       registering both MCP servers with Claude Code
 .agents/skills/ (+ .claude/skills/ copy)   ai-tutor-design, ai-tutor-cli, add-app-to-server, copilotkit, mastra
@@ -106,8 +107,11 @@ docs/mcp.md                       registering both MCP servers with Claude Code
 
 - Vitest only picks up `tests/{unit,integration}/**/*.test.{ts,tsx}` and cannot render async Server Components, so cover those with e2e.
 - Vitest does not load `.env`: tests stub `DATABASE_URL`/`BETTER_AUTH_*` onto temp files, and `server-only` resolves to its throwing build outside Next.js, so modules that import it are loaded under `vi.mock("server-only", () => ({}))`.
+- A suite's throwaway directory goes through `makeTempDir`/`removeTempDir` from `tests/support/temp-dir.ts`, because Windows will not unlink an open file and a closed libSQL connection is not enough — the native driver holds the database until a garbage collection finalises the statements it prepared, which is what the helper forces.
+- Every connection onto a suite's temp file therefore has to be closed in `afterAll`, including the ones `lib/db.ts` and `lib/tutor.ts` cache on `globalThis` to survive a hot reload, since `vi.resetModules()` does not drop those.
 - `tests/e2e/*.spec.ts` hit `data/app.db`, so they sign up `Date.now()`-stamped emails; `*.llm.spec.ts` is ignored unless `E2E_LLM` is set.
 - The token-verified path of `/api/mcp` needs the app's own JWKS over HTTP, so it has no unit test; `tests/integration/cli.test.ts` is the one place a real `next dev` is exercised from Vitest.
+- That suite branches on `process.platform` three times, because Windows has no runnable `node_modules/.bin` shim (it runs `next`'s own entry point under this Node and lets cmd.exe resolve `npm`), no process group to signal (`taskkill /t` instead), and no file mode bits to assert on.
 
 ### CLI
 
@@ -124,3 +128,13 @@ docs/mcp.md                       registering both MCP servers with Claude Code
 - Keep it a map plus non-obvious traps: anything a reader learns by opening the file a line points to belongs in that file's comments, not here.
 - One sentence per bullet, current state only, no history.
 - The two `.tours/*.tour` files anchor by line number into the files they name (`app/page.tsx`, `lib/tutor.ts`, `lib/todo-tools.ts`, the CopilotKit route, `components/`, `scripts/build-views.mjs`, `lib/mcp-app-views.ts`, `mcp-apps/todo-form/`, `package.json`, `.gitignore`, and their tests), so re-check `line` values when those statements move.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

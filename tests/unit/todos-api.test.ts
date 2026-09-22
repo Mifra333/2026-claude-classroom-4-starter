@@ -1,6 +1,4 @@
 // @vitest-environment node
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ApiError,
@@ -13,6 +11,7 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 import { drizzle } from "drizzle-orm/libsql/node";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { authOptions } from "@/lib/auth-config";
+import { makeTempDir, removeTempDir } from "@/tests/support/temp-dir";
 
 // The routes import lib/auth and lib/db, which are `server-only` and read their
 // configuration from the environment, so they run for real against a throwaway
@@ -29,7 +28,7 @@ let routes: typeof import("@/app/api/todos/route");
 let itemRoute: typeof import("@/app/api/todos/[id]/route");
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), "ai-tutor-todos-api-"));
+  dir = await makeTempDir("ai-tutor-todos-api-");
   const url = `file:${join(dir, "test.db")}`;
   vi.stubEnv("DATABASE_URL", url);
   vi.stubEnv("BETTER_AUTH_SECRET", secret);
@@ -46,7 +45,7 @@ afterAll(async () => {
   db.$client.close();
   (globalThis as { db?: typeof db }).db?.$client.close();
   vi.unstubAllEnvs();
-  await rm(dir, { recursive: true, force: true });
+  await removeTempDir(dir);
 });
 
 const request = (
