@@ -27,12 +27,14 @@ app/
 components/
   chat.tsx                        CopilotKit provider, CopilotChat, and the sidebar in one tree
   todos-sidebar.tsx               read-only mirror of the list; the agent is the browser's only write path
-  todo-tool-calls.tsx             useRenderTool renderers for the three agent tools
+  todo-tool-calls.tsx             useRenderTool renderers for the three list-writing tools
+  a2ui-catalog.tsx                the A2UI catalog: the basic components plus this app's ProgressBar
   project-wizard.tsx, device-approval.tsx, oauth-consent.tsx, sign-out-button.tsx
   ui/                             presentational primitives — extend one instead of repeating its class string
 lib/
   tutor.ts                        the whole agent: instructions, model, memory, tools
   todo-tools.ts                   every todo query; the agent tools, the REST routes and both MCP servers call it
+  progress-card.ts                the progress card's A2UI component tree and its operations, authored once
   db.ts, schema.ts, auth-schema.ts   cached Drizzle connection; app tables; generated auth tables
   auth.ts, auth-config.ts, auth-cli.ts, auth-client.ts   server instance; shared options; auth:generate target; browser client
   api-route.ts                    bearer-only session and JSON helpers for /api/todos
@@ -87,6 +89,12 @@ docs/mcp.md                       registering both MCP servers with Claude Code
 - `@copilotkit/react-core/v2` and `@copilotkit/runtime/v2` (`createCopilotRuntimeHandler`) are the only surfaces that work here; `@copilotkit/react-ui`, the package roots, and the Express/Hono adapters are v1.
 - CopilotKit questions go through the `copilotkit` skill, which sends you to the `copilotkit-docs` MCP server in `.mcp.json`; Mastra questions through the `mastra` skill.
 - Mastra memory is durable in SQLite, but the default `InMemoryAgentRunner` also keeps a bounded replay cache that can restore the browser transcript until eviction or restart — do not mistake either for the other when debugging.
+- The A2UI middleware is on with `injectA2UITool: true` (`a2ui` in the CopilotKit route), so the agent holds a `render_a2ui` tool and composes surfaces of its own beside the one authored card; unset, the flag would follow the browser instead, because a catalog on the provider turns it on.
+- `includeSchema` stays `true` on the provider in `components/chat.tsx`, because the injected tool's guidelines let the model name only components it has been shown, and the middleware also reads a generated surface's catalog id off that same context entry.
+- `showProgress` returns its operations under `a2ui_operations`, which is the only key the middleware looks for in a tool result; renaming it makes the card fall through as plain JSON.
+- Every surface's `catalogId` has to be `TUTOR_CATALOG_ID` from `lib/progress-card.ts` — the authored card names it outright, a generated one inherits it from the schema context, and a mismatch renders as "Catalog not found" rather than as an error anywhere near the cause.
+- `@copilotkit/a2ui-renderer` is built against zod 3 and nests its own copy, so catalog prop schemas are written with `zod/v3` (zod 4's bundled zod 3), and the two are nominally distinct types however identical at runtime — hence the casts in `components/a2ui-catalog.tsx`, not a shortcut.
+- A catalog prop is bindable only if its schema is one of the renderer's `Dynamic*Schema`s; a bare `z.string()` lets an unresolved `{ path }` reach React and throws at render.
 
 ### Styling
 

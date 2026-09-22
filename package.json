@@ -24,6 +24,7 @@
     "auth:generate": "npx --yes auth@latest generate --config lib/auth-cli.ts --adapter drizzle --dialect sqlite --output lib/auth-schema.ts -y"
   },
   "dependencies": {
+    "@ag-ui/a2ui-toolkit": "^0.0.4",
     "@ag-ui/client": "^0.0.59",
     "@ag-ui/core": "^0.0.59",
     "@ag-ui/mastra": "^1.1.4",
@@ -31,6 +32,7 @@
     "@better-auth/drizzle-adapter": "^1.7.5",
     "@better-auth/mcp": "^1.7.5",
     "@better-auth/oauth-provider": "^1.7.5",
+    "@copilotkit/a2ui-renderer": "^1.73.0",
     "@copilotkit/react-core": "^1.73.0",
     "@copilotkit/runtime": "^1.73.0",
     "@libsql/client": "^0.18.0",
@@ -67,5 +69,10 @@
     "vite": "^8.3.0",
     "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^5.0.1"
+  },
+  "allowScripts": {
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
   }
 }

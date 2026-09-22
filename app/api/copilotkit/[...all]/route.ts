@@ -30,6 +30,14 @@ async function handler(request: Request) {
 
   const runtime = new CopilotRuntime({
     agents: { [TUTOR_AGENT_ID]: agent },
+    // Two jobs for the one middleware. It turns the `showProgress` tool
+    // result's `a2ui_operations` into a rendered surface, and
+    // `injectA2UITool: true` hands the agent a `render_a2ui` tool besides, so
+    // it can compose a surface of its own for whatever the card authored in
+    // lib/progress-card.ts does not cover. Left unset the flag defaults to true
+    // anyway once the browser sends a catalog, but the model gaining a tool is
+    // too large a thing to leave to a default.
+    a2ui: { injectA2UITool: true },
   });
 
   return createCopilotRuntimeHandler({ runtime, basePath })(request);

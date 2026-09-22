@@ -9,7 +9,7 @@
     },
     {
       "file": "package.json",
-      "line": 67,
+      "line": 69,
       "title": "The two devDependencies and the three scripts",
       "description": "`vite` and `vite-plugin-singlefile`, both dev only: the bundle ships, the bundler does not.\n\nThe plugin is the trick itself. Vite builds a view the normal way, emitting JavaScript and CSS beside the HTML, and the plugin folds every one of those emitted assets back into the document before it is written.\n\n**Scroll up to `scripts`:** `build:views` runs the build script, and `predev` and `prebuild` call it, so `npm run dev` and `npm run build` cannot start on a stale bundle.\n\n**Key point:** `next dev` does not watch `mcp-apps/`. Edit a view while the server is running and you rebuild by hand."
     },

@@ -15,8 +15,9 @@ const getLocalAgent = vi.fn(
 vi.mock("@ag-ui/mastra", () => ({ MastraAgent: { getLocalAgent } }));
 
 const runtimeHandler = vi.fn(async () => new Response("ok"));
+const copilotRuntime = vi.fn(function CopilotRuntime(this: unknown) {});
 vi.mock("@copilotkit/runtime/v2", () => ({
-  CopilotRuntime: vi.fn(function CopilotRuntime(this: unknown) {}),
+  CopilotRuntime: copilotRuntime,
   createCopilotRuntimeHandler: vi.fn(() => runtimeHandler),
 }));
 
@@ -88,6 +89,19 @@ describe("the CopilotKit route", () => {
 
     expect(getLocalAgent).toHaveBeenCalledWith(
       expect.objectContaining({ resourceId: "user-b" }),
+    );
+  });
+
+  test("gives the agent the A2UI render tool, rather than a default", async () => {
+    getSession.mockResolvedValue({ user: { id: "user-a" } });
+
+    await POST(runRequest());
+
+    // `injectA2UITool` decides whether the model may compose surfaces of its
+    // own. Unset it follows the browser — a catalog on the provider turns it on
+    // — so the flag is pinned here to keep that out of the client's hands.
+    expect(copilotRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ a2ui: { injectA2UITool: true } }),
     );
   });
 });

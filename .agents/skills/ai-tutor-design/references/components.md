@@ -133,6 +133,28 @@ border-l-2 border-danger bg-danger-surface px-3 py-2 text-sm text-danger
 The left rule carries the alarm, matching the tool-call marker; the tint alone
 would be colour-only state.
 
+## Progress bar
+
+`components/a2ui-catalog.tsx`. The A2UI basic catalog has no bar of its own, so
+this app adds one; it is the only component drawn *inside* an agent-authored
+surface rather than by a React tree we wrote.
+
+```
+track  h-2 w-full border border-edge bg-raised
+fill   h-full bg-button                    (width set inline, as a percentage)
+label  text-sm text-ink-mute tabular-nums
+```
+
+`bg-button`, not `bg-accent`. A filled bar is the single most tempting place to
+reach for the signal blue, and it is exactly the wrong one — blue here means
+"this is a link", so a blue bar makes the one blue thing on the screen
+unclickable. Graphite is the same answer the buttons give, for the same reason.
+
+The fill is geometry and carries no text, so the figure has to reach assistive
+tech another way: `role="progressbar"` with `aria-valuenow`/`min`/`max` and an
+`aria-label`. The caption underneath repeats it in words for everyone else,
+which is the same "never colour alone" rule the tool-call row follows.
+
 ## The chat, which is not ours
 
 `CopilotChat` ships its own theme, and bending it is fiddly enough to be worth
@@ -158,3 +180,4 @@ knowing before you start:
   a grey.
 - A second accent colour. If something must stand out and blue is taken, the
   answer is weight 600 or a hairline, not a new hue.
+- A blue fill of any kind — a bar, a meter, a gauge. See **Progress bar**.

@@ -15,15 +15,15 @@
     },
     {
       "file": "lib/todo-tools.ts",
-      "line": 94,
+      "line": 129,
       "title": "Tools: the ids are the contract",
-      "description": "`createTodoTools` builds the three Mastra tools the agent may call: `listTodos`, `addTodo`, `setTodoDone`. Each reads its `userId` off the per-request context, so a tool carries no user of its own.\n\n**Show:** the `id` strings, and the `.describe()` text on the input fields.\n\nOne literal, two audiences. The model reads the description and the tool name to decide what to call; the frontend, later in this tour, matches on exactly that `id`."
+      "description": "`createTodoTools` builds the Mastra tools the agent may call: `listTodos`, `addTodo`, `setTodoDone`, and `showProgress`. Each reads its `userId` off the per-request context, so a tool carries no user of its own.\n\n**Show:** the `id` strings, and the `.describe()` text on the input fields.\n\nOne literal, two audiences. The model reads the description and the tool name to decide what to call; the frontend, later in this tour, matches on exactly that `id` — for the first three. `showProgress` is the exception this tour ends on: it returns its own UI instead, and no frontend renderer names it."
     },
     {
       "file": "lib/tutor.ts",
-      "line": 116,
+      "line": 120,
       "title": "Agent: where the tools reach the model",
-      "description": "`lib/tutor.ts` is the whole agent: one `Agent` on an OpenRouter model with durable memory, held on a `Mastra` instance.\n\nThis line is the only place the tools are attached. Scroll up to `instructions` and note that the prose names `listTodos`, `addTodo` and `setTodoDone` and says when to use each one, so the ids appear twice and have to stay in step."
+      "description": "`lib/tutor.ts` is the whole agent: one `Agent` on an OpenRouter model with durable memory, held on a `Mastra` instance.\n\nThis line is the only place the tools are attached. Scroll up to `instructions` and note that the prose names each tool and says when to use it, so the ids appear twice and have to stay in step."
     },
     {
       "file": "app/api/copilotkit/[...all]/route.ts",
@@ -33,7 +33,7 @@
     },
     {
       "file": "components/chat.tsx",
-      "line": 30,
+      "line": 31,
       "title": "Provider: three children, three jobs",
       "description": "The `CopilotKit` provider is the client boundary, and it holds three children that do very different things.\n\n`CopilotChat` renders the transcript. `TodoToolCalls` registers the tool renderers and returns `null`, so it draws nothing of its own, but it has to sit inside the provider because registration is a hook. `TodosSidebar` observes the same run.\n\n**Distinction:** one provider, one agent run, three consumers of the same event stream."
     },

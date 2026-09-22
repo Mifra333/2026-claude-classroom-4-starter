@@ -4,6 +4,7 @@ import { Todo } from "ai-tutor-api-contract";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { drizzle } from "drizzle-orm/libsql/node";
 import { z } from "zod";
+import { progressCardOperations } from "@/lib/progress-card";
 import type * as schema from "@/lib/schema";
 import { todos } from "@/lib/schema";
 
@@ -83,6 +84,40 @@ export async function setTodoDoneFor(
   return row ?? null;
 }
 
+/**
+ * The one tally of the list, behind the `showProgress` tool. Counted by SQLite
+ * over the rows themselves rather than over a fetched array, so the figures on
+ * the card are the database's answer and the model is never asked for them.
+ *
+ * An empty list has no share to report. 0% is the honest reading of it, and it
+ * keeps the card's single component tree valid rather than needing a second
+ * one for the empty case.
+ */
+export async function todoProgressFor(db: TodoDb, userId: string) {
+  const [row] = await db
+    .select({
+      total: sql<number>`count(*)`,
+      done: sql<number>`coalesce(sum(${todos.done}), 0)`,
+    })
+    .from(todos)
+    .where(eq(todos.userId, userId));
+
+  const total = Number(row?.total ?? 0);
+  const done = Number(row?.done ?? 0);
+  // Rounded once and subtracted, so the two shares always add up to 100.
+  const doneShare = total === 0 ? 0 : Math.round((done / total) * 100);
+
+  return {
+    total,
+    done,
+    open: total - done,
+    doneShare,
+    openShare: total === 0 ? 0 : 100 - doneShare,
+  };
+}
+
+export type TodoProgress = Awaited<ReturnType<typeof todoProgressFor>>;
+
 export type TodoItem = Awaited<ReturnType<typeof listTodosFor>>[number];
 
 /**
@@ -138,5 +173,25 @@ export function createTodoTools(db: TodoDb) {
     }),
   });
 
-  return { listTodos, addTodo, setTodoDone };
+  const showProgress = createTool({
+    id: "showProgress",
+    description:
+      "Show the student a card in the chat with how much of their list is done. The card carries its own figures, read from the list — do not work them out or repeat them yourself.",
+    inputSchema: z.object({}),
+    // An A2UI operation is an open envelope by design, so the shape is checked
+    // where it matters (lib/progress-card.ts and its test) rather than here.
+    outputSchema: z.object({
+      a2ui_operations: z.array(z.record(z.string(), z.unknown())),
+    }),
+    requestContextSchema,
+    // One read, then the card the operations already describe. The tool does
+    // not ask a model to design anything, so a card costs no extra LLM call.
+    execute: async (_input, { requestContext }) => ({
+      a2ui_operations: progressCardOperations(
+        await todoProgressFor(db, requestContext.get("userId")),
+      ),
+    }),
+  });
+
+  return { listTodos, addTodo, setTodoDone, showProgress };
 }
