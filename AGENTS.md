@@ -40,11 +40,12 @@ lib/
   db.ts, schema.ts, auth-schema.ts   cached Drizzle connection; app tables; generated auth tables
   auth.ts, auth-config.ts, auth-cli.ts, auth-client.ts   server instance; shared options; auth:generate target; browser client
   api-route.ts                    bearer-only session and JSON helpers for /api/todos
-  mcp-server.ts, mcp-app-views.ts MCP server factory; reader for built MCP App views
+  mcp-server.ts, mcp-app-views.ts MCP server factory, including its one MCP App; reader for built views
   project.ts, tool-result.ts      wizard rules (plain module); AG-UI tool-result decoding
 packages/api-contract/            zod request/response schemas and MCP tool definitions shared by app and CLI
 cli/                              `ai-tutor` CLI (commander, esbuild-bundled) including `mcp --stdio`
 mcp-apps/<name>/ → mcp-apps/dist/ MCP App views, each bundled into one HTML file by scripts/build-views.mjs
+  todo-form/view.ts               the view's own half of MCP: an ext-apps `App` that calls back and saves
 drizzle/                          generated migrations
 tests/unit, tests/integration     Vitest (node env by default; *.test.tsx is jsdom)
 tests/support/                    helpers the suites share; outside the include glob, so never collected
@@ -107,6 +108,19 @@ docs/mcp.md                       registering both MCP servers with Claude Code
 - Every surface's `catalogId` has to be `TUTOR_CATALOG_ID` from `lib/progress-card.ts` — the authored card names it outright, a generated one inherits it from the schema context, and a mismatch renders as "Catalog not found" rather than as an error anywhere near the cause.
 - `@copilotkit/a2ui-renderer` is built against zod 3 and nests its own copy, so catalog prop schemas are written with `zod/v3` (zod 4's bundled zod 3), and the two are nominally distinct types however identical at runtime — hence the casts in `components/a2ui-catalog.tsx`, not a shortcut.
 - A catalog prop is bindable only if its schema is one of the renderer's `Dynamic*Schema`s; a bare `z.string()` lets an unresolved `{ path }` reach React and throws at render.
+
+### MCP Apps
+
+- `open_todo_form` and `submit_todo_form` are registered in `lib/mcp-server.ts` with ext-apps' `registerAppTool`/`registerAppResource` and deliberately kept out of the contract's `mcpTools`, because `cli/` registers everything in there and a terminal can neither draw a form nor submit one.
+- `submit_todo_form` carries `_meta.ui.visibility: ["app"]`, which the SDK only passes through — the *host* is what keeps the model from calling it, so the tool still validates its own input and still writes for the token's user, exactly as if anyone could reach it.
+- A view's `callServerTool` is proxied by the host back to the server the view came from, so the view names a tool and never a user; the row is written for the `userId` fixed when `createTodoMcpServer` was built.
+- Neither form tool reaches the transcript, so after a save the view calls `updateModelContext` to tell the model what is on the list; without it the next turn would have to call `list_todos` to find out.
+- A refused tool input comes back as a result with `isError`, not as a thrown error — only the transport throws — so a view that only catches is a view that silently drops refusals.
+- A `ui://` uri is never fetched — the host reads the resource back off this same MCP server — so its authority is a name, and `RESOURCE_MIME_TYPE` (`text/html;profile=mcp-app`) is what marks the HTML as an App rather than as a page to show as text.
+- `registerAppTool` writes both `_meta.ui.resourceUri` and the older `_meta["ui/resourceUri"]`, so do not "tidy" either away: hosts read one or the other.
+- `createTodoMcpServer` takes the views directory as a third parameter for the same reason `readView` takes one — the built views are git-ignored, so no test may need them.
+- In a view, every `App` handler goes on before `connect()`, because the host sends the tool input as a notification the moment the handshake is done; the first host context is the exception and is read with `getHostContext()` instead.
+- `@modelcontextprotocol/client` is a devDependency although the view imports it through ext-apps' root export: `build:views` inlines it into the bundle, so like vite it is needed to build and never to run.
 
 ### Styling
 
