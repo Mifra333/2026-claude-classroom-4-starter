@@ -27,9 +27,9 @@
     },
     {
       "file": "app/api/copilotkit/[...all]/route.ts",
-      "line": 24,
+      "line": 29,
       "title": "Transport: tool calls become events",
-      "description": "This route is the seam between the agent and the browser. It gates on the session first, then `MastraAgent.getLocalAgent` builds an AG-UI bridge per request, with `resourceId` and `requestContext` taken from the verified user id.\n\nBelow it, `CopilotRuntime` registers that bridged agent and `createCopilotRuntimeHandler` serves it under `/api/copilotkit`.\n\n**Key point:** tool calls do not stay on the server. They reach the browser as AG-UI events, one for the call, one for the arguments as they stream in, one for the result."
+      "description": "This route is the seam between the agent and the browser. It gates on the session first, then `MastraAgent.getLocalAgent` builds an AG-UI bridge per request, with `resourceId` and `requestContext` taken from the verified user id.\n\nBelow it a second bridge is built the same way for the project wizard's agent, and `CopilotRuntime` registers both under `/api/copilotkit`, where `createCopilotRuntimeHandler` serves them.\n\n**Key point:** tool calls do not stay on the server. They reach the browser as AG-UI events, one for the call, one for the arguments as they stream in, one for the result."
     },
     {
       "file": "components/chat.tsx",

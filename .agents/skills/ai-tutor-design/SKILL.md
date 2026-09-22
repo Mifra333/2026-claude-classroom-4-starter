@@ -211,10 +211,14 @@ The short version:
 - **Header nav** — one or two `HeaderLink`s in `PageHeader`'s `nav`, left of
   the actions. This is the app naming its other page, not heise's topic nav, so
   keep it to the routes a user actually moves between.
-- **Record card** — a panel of label/value rows (`components/project-wizard.tsx`)
-  with the input that edits it underneath, and a status line under that. Labels
-  go in a fixed left column at `text-sm text-ink-mute`, values at `text-base
-  text-ink`, and an empty value reads "not set" rather than a dash.
+- **Record card** — a panel whose body is an A2UI surface rather than our own
+  markup (`components/project-wizard.tsx`), with the input that drives it
+  underneath and a status line under that. The panel, its heading and the
+  empty state are ours and follow the rules above; the fields inside are the
+  basic catalog's components, drawn by the A2UI renderer with its own
+  stylesheet, so there is nothing there to restyle with a Tailwind class. If
+  that body ever needs to look like the rest of the app, the lever is the
+  `theme` prop on `A2UIProvider` — not a class on the surface.
 - **Column header** — `text-sm text-ink-mute`, sentence case, over a rule.
   Not uppercase: heise uses plain sentence case for its table headers, and the
   uppercase-tracked-micro-label is a different design system's tic.

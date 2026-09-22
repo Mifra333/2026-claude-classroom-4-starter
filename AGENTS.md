@@ -17,7 +17,7 @@ app/
   layout.tsx, globals.css         root layout; design tokens and the CopilotKit theme bridge
   page.tsx                        `/`, the chat page (session-gated Server Component)
   login/, signup/                 email/password forms (client components)
-  projects/new/                   project wizard scaffold — no agent behind it yet, seam marked in onSubmit
+  projects/new/                   project wizard; its card is an A2UI surface outside any chat
   device/, consent/               approval pages for the CLI device flow and for MCP OAuth
   api/auth/[...all]/              Better Auth handler
   api/copilotkit/[...all]/        AG-UI bridge: session → Mastra agent → CopilotKit runtime
@@ -29,12 +29,14 @@ components/
   todos-sidebar.tsx               read-only mirror of the list; the agent is the browser's only write path
   todo-tool-calls.tsx             useRenderTool renderers for the three list-writing tools
   a2ui-catalog.tsx                the A2UI catalog: the basic components plus this app's ProgressBar
-  project-wizard.tsx, device-approval.tsx, oauth-consent.tsx, sign-out-button.tsx
+  project-wizard.tsx              runs the wizard agent and renders its surface itself — no CopilotChat
+  device-approval.tsx, oauth-consent.tsx, sign-out-button.tsx
   ui/                             presentational primitives — extend one instead of repeating its class string
 lib/
   tutor.ts                        the whole agent: instructions, model, memory, tools
   todo-tools.ts                   every todo query; the agent tools, the REST routes and both MCP servers call it
   progress-card.ts                the progress card's A2UI component tree and its operations, authored once
+  project-agent.ts, project-card.ts   the wizard's agent and its one tool; that card's tree and the state that travels with it
   db.ts, schema.ts, auth-schema.ts   cached Drizzle connection; app tables; generated auth tables
   auth.ts, auth-config.ts, auth-cli.ts, auth-client.ts   server instance; shared options; auth:generate target; browser client
   api-route.ts                    bearer-only session and JSON helpers for /api/todos
@@ -92,6 +94,15 @@ docs/mcp.md                       registering both MCP servers with Claude Code
 - Mastra memory is durable in SQLite, but the default `InMemoryAgentRunner` also keeps a bounded replay cache that can restore the browser transcript until eviction or restart — do not mistake either for the other when debugging.
 - The A2UI middleware is on with `injectA2UITool: true` (`a2ui` in the CopilotKit route), so the agent holds a `render_a2ui` tool and composes surfaces of its own beside the one authored card; unset, the flag would follow the browser instead, because a catalog on the provider turns it on.
 - `includeSchema` stays `true` on the provider in `components/chat.tsx`, because the injected tool's guidelines let the model name only components it has been shown, and the middleware also reads a generated surface's catalog id off that same context entry.
+- `a2ui.agents` scopes the middleware to the tutor, so the wizard agent gets no `render_a2ui` tool and no surface conversion; `components/project-wizard.tsx` reads `a2ui_operations` off the tool result itself and hands it to its own `A2UIProvider`.
+- Outside a chat nobody has called `initializeDefaultCatalog()` and `injectStyles()` — `@copilotkit/react-core` does that for itself before drawing a surface in the transcript — so the wizard does it on mount or its card renders unstyled.
+- The wizard agent is on its own model (`openrouter/google/gemini-3.1-flash-lite`) because the tutor's reasoning model works the dates out in its reasoning and then omits them from the tool call.
+- It has no memory and each submit calls `agent.setMessages` with one message, so a run carries that instruction and nothing else; its `today` comes from the route's own clock through the `RequestContext`, never from the browser.
+- The wizard's state travels instead of being remembered: the page sends the surface's live data model (`surface.dataModel.get("/")`, manual edits included) as a `copilotkit.addContext` entry, and the tool finds it again under `requestContext.get("ag-ui").context` by its description — `forwardedProps` do **not** reach a Mastra tool, only `input.context` does.
+- That data model holds only what the tree binds, so the effort is the string `/effort` and the criticality the array `/criticalityChoice`; a second copy of either as a raw project field would go stale the moment someone edited the input, since the bindings write back to the bound path.
+- The first `setProject` call creates the surface and every later one returns a single `updateDataModel`, so the card is amended in place — `assembleOps({ intent: "update" })` is the wrong tool for that, because it still sends `updateComponents`.
+- A refused field shows in the card, in a `Text` bound to `/errors/<field>` that is in the tree from the first paint and empty when there is nothing to say; the status line carries `describeChanges` alone.
+- `lib/project-agent.ts` builds a `Mastra` with no storage, so every run logs "No `storage` configured on Mastra — falling back to an in-memory store"; that is the no-memory design, not a misconfiguration.
 - `showProgress` returns its operations under `a2ui_operations`, which is the only key the middleware looks for in a tool result; renaming it makes the card fall through as plain JSON.
 - Every surface's `catalogId` has to be `TUTOR_CATALOG_ID` from `lib/progress-card.ts` — the authored card names it outright, a generated one inherits it from the schema context, and a mismatch renders as "Catalog not found" rather than as an error anywhere near the cause.
 - `@copilotkit/a2ui-renderer` is built against zod 3 and nests its own copy, so catalog prop schemas are written with `zod/v3` (zod 4's bundled zod 3), and the two are nominally distinct types however identical at runtime — hence the casts in `components/a2ui-catalog.tsx`, not a shortcut.
