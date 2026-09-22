@@ -56,6 +56,6 @@ the component it draws in the chat transcript, the other the build that turns a 
 
 ## Architecture
 
-`AGENTS.md` is the reference: one section per area (app code, persistence, auth, REST API,
-agent, CLI, MCP, styling, tests) with the decisions and the traps behind each one. Read it
+`AGENTS.md` is the entry point: a map of the repository plus the traps that no single source
+file shows. The decisions behind each file are commented in the file itself. Read the map
 before changing anything.

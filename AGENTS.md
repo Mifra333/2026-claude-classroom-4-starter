@@ -1,183 +1,118 @@
-<!-- BEGIN:nextjs-agent-rules -->
-
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
-<!-- END:nextjs-agent-rules -->
-
 # ai-tutor
 
-AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra agent served to a CopilotKit chat over AG-UI, behind Better Auth email/password sign-in, over a Drizzle/SQLite persistence layer, with a Vitest + Playwright test harness.
-The root package is also an npm workspace root for `cli/` (`ai-tutor-cli`, the `ai-tutor` binary) and `packages/api-contract/` (`ai-tutor-api-contract`, the zod schemas both sides import).
+AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra agent (Bartholomew, a butler who keeps the user's to-do list) served to a CopilotKit chat over AG-UI, behind Better Auth email/password sign-in, over a Drizzle/SQLite persistence layer, with a Vitest + Playwright test harness. The same list is reachable through a REST API, a CLI, and two MCP servers.
+
+The source is commented where a decision is not obvious; this file is the map, plus the traps that no single file shows. Open the file before asking here.
+
+## Map
+
+```
+app/
+  layout.tsx, globals.css         root layout; design tokens and the CopilotKit theme bridge
+  page.tsx                        `/`, the chat page (session-gated Server Component)
+  login/, signup/                 email/password forms (client components)
+  projects/new/                   project wizard scaffold — no agent behind it yet, seam marked in onSubmit
+  device/, consent/               approval pages for the CLI device flow and for MCP OAuth
+  api/auth/[...all]/              Better Auth handler
+  api/copilotkit/[...all]/        AG-UI bridge: session → Mastra agent → CopilotKit runtime
+  api/todos/, api/todos/[id]/     REST API over lib/todo-tools.ts
+  api/mcp/                        MCP server over HTTP, OAuth-protected
+  .well-known/                    OAuth discovery documents, handed to Better Auth
+components/
+  chat.tsx                        CopilotKit provider, CopilotChat, and the sidebar in one tree
+  todos-sidebar.tsx               read-only mirror of the list; the agent is the browser's only write path
+  todo-tool-calls.tsx             useRenderTool renderers for the three agent tools
+  project-wizard.tsx, device-approval.tsx, oauth-consent.tsx, sign-out-button.tsx
+  ui/                             presentational primitives — extend one instead of repeating its class string
+lib/
+  tutor.ts                        the whole agent: instructions, model, memory, tools
+  todo-tools.ts                   every todo query; the agent tools, the REST routes and both MCP servers call it
+  db.ts, schema.ts, auth-schema.ts   cached Drizzle connection; app tables; generated auth tables
+  auth.ts, auth-config.ts, auth-cli.ts, auth-client.ts   server instance; shared options; auth:generate target; browser client
+  api-route.ts                    bearer-only session and JSON helpers for /api/todos
+  mcp-server.ts, mcp-app-views.ts MCP server factory; reader for built MCP App views
+  project.ts, tool-result.ts      wizard rules (plain module); AG-UI tool-result decoding
+packages/api-contract/            zod request/response schemas and MCP tool definitions shared by app and CLI
+cli/                              `ai-tutor` CLI (commander, esbuild-bundled) including `mcp --stdio`
+mcp-apps/<name>/ → mcp-apps/dist/ MCP App views, each bundled into one HTML file by scripts/build-views.mjs
+drizzle/                          generated migrations
+tests/unit, tests/integration     Vitest (node env by default; *.test.tsx is jsdom)
+tests/e2e                         Playwright against its own `next dev`
+docs/mcp.md                       registering both MCP servers with Claude Code
+.agents/skills/ (+ .claude/skills/ copy)   ai-tutor-design, ai-tutor-cli, add-app-to-server, copilotkit, mastra
+.tours/                           CodeTours the README points at
+```
 
 ## Commands
 
-- If Turbopack fails to replace a symlink under `.next/dev/node_modules`, stop the server and remove that generated directory so it can recreate the links; copied build output can contain ordinary directories in their place.
-- `npm run dev` / `npm run build` / `npm run start`.
-- If a build reports stale generated route types while `tsc --noEmit --incremental false` passes, remove `.next/cache/.tsbuildinfo` before rebuilding.
-- `npm run lint` is `biome check` and `npm run format` is `biome format --write` — Biome only, so never add ESLint or Prettier config.
-- `npm test` (Vitest, single run), `npm run test:watch`, `npm run test:e2e` (Playwright), `npm run test:e2e:llm` (the one spec that spends OpenRouter credit).
-- `npm run db:generate` writes a migration from the schema and `npm run db:migrate` applies it to `DATABASE_URL`.
-- `npm run auth:generate` regenerates `lib/auth-schema.ts` from the Better Auth config; follow it with `db:generate` + `db:migrate`.
-- `npm install` builds the CLI through its `prepare` script, after which `npx ai-tutor --help` works from the root; rebuild after edits with `npm run build -w ai-tutor-cli`.
+- `npm run dev` / `build` / `start`; `npm run lint` (`biome check`) and `npm run format` — Biome only, never add ESLint or Prettier.
+- `npm test` (Vitest), `npm run test:e2e` (Playwright), `npm run test:e2e:llm` (the one spec that spends OpenRouter credit).
+- Schema change: edit `lib/schema.ts`, then `npm run db:generate` and `npm run db:migrate`.
+- Auth change that touches tables: `npm run auth:generate` (rewrites `lib/auth-schema.ts` wholesale), then `db:generate` and `db:migrate`.
+- `npm install` builds the CLI through its `prepare` script; rebuild after edits with `npm run build -w ai-tutor-cli`.
+- `npm run build:views` bundles the MCP App views; `predev`/`prebuild` run it, but `next dev` does not watch `mcp-apps/`, so re-run it by hand after editing a view.
 
-## App code — `app/layout.tsx`, `app/page.tsx`, `components/`
+## Gotchas
 
-- `PageProps<'/route'>` and `LayoutProps<'/route'>` are globals generated by `next dev`, `next build`, or `next typegen`, so generate them before typechecking a clean checkout.
-- TypeScript is v7, so `next build` type-checks by shelling out to the project-local `tsc` and prints plain `tsc` diagnostics without Next.js code frames.
-- Import across the repo with the `@/*` alias (rooted at this directory), not deep relative paths.
-- `components/ui/` holds the presentational primitives (`auth-card`, `field`, `button`, `form-error`, `page-header`, `tool-call`); extend one instead of repeating its class string.
-- Shared primitives live in `components/ui/` and tokens and CopilotKit overrides in `app/globals.css`; document new design rules in `ai-tutor-design` before using them.
-- `/` is the chat page: a Server Component that gates on the session, then renders `PageHeader` plus the client-only `components/chat.tsx`.
-- `components/chat.tsx` owns the `CopilotKit` provider and lays out the chat beside `components/todos-sidebar.tsx`, which must stay inside that provider to reach `useAgent`.
-- The sidebar is read-only because the agent is the browser's write path: it renders the server-rendered `initialTodos`, then refetches `GET /api/todos` on its session cookie whenever the run it subscribes to yields a tool result or ends.
-- It is also `hidden` below `md`, where its fixed 288px would leave the transcript about 90px; the tool-call rows report every change to the list anyway.
-- `CopilotChat` binds by `agentId` alone, so the sidebar's `useAgent({ agentId })` is that same instance — a private thread-scoped hook also requires `runtimeAgentId` and would subscribe to a separate agent.
-- `components/todo-tool-calls.tsx` registers one `useRenderTool` per tool for the transcript (status is camelCase `inProgress`/`executing`/`complete`, and `parameters` is partial until the arguments finish streaming).
-- `lib/tool-result.ts` decodes the JSON text AG-UI puts on a tool result; it stays out of the component because importing `@copilotkit/react-core/v2` in a Vitest file fails on that package's CSS side effect.
+### Build and tooling
 
-## Project wizard — `app/projects/new`, `components/project-wizard.tsx`, `lib/project.ts`
+- `PageProps<'/route'>` and `LayoutProps<'/route'>` are globals generated by `next dev`/`next build`/`next typegen`, so generate them before typechecking a clean checkout.
+- If Turbopack fails to replace a symlink under `.next/dev/node_modules`, stop the server and delete that generated directory.
+- If a build reports stale generated route types while `tsc --noEmit --incremental false` passes, delete `.next/cache/.tsbuildinfo`.
+- TypeScript is v7, so `next build` type-checks by shelling out to the project-local `tsc` and prints plain diagnostics without code frames.
+- `npm run format` skips assist actions such as import sorting; use `npx biome check --write <path>` for those.
+- The e2e and CLI test servers set `NEXT_DIST_DIR` (`.next-e2e`, `.next-cli-test`) to coexist with a running `npm run dev`; `next dev` adds their type dirs to `tsconfig.json` itself and reformats the file, so run `npm run format` afterwards.
+- `@copilotkit/runtime` drags in a zod-3 tree while Better Auth is on zod 4; npm nests the zod 3 copy under `@copilotkit/runtime/node_modules` on its own — no `.npmrc` or `--legacy-peer-deps`.
+- `@modelcontextprotocol/ext-apps` 2.x is a root dependency while `@copilotkit/react-core` nests its own 1.7.5; both are expected in `npm ls`.
 
-- `/projects/new` is a Server Component gated like `/`, and it renders `PageHeader` plus the client `ProjectWizard` with `today` so the planning date comes from the server clock.
-- `lib/project.ts` is plain (no `server-only`, no db) so the client component, a Server Component and Vitest all import it: `projectSchema`/`Project`, `emptyProject`, `projectPatchSchema`/`ProjectPatch`, `applyProjectPatch`, `describeChanges`.
-- `applyProjectPatch` owns every rule — real calendar dates, end not before start, effort above zero — and a field that fails keeps its old value and reports a message while the rest of the same patch still lands.
-- `projectPatchSchema`'s `.describe()` text is written for a model that will fill it as tool input, so it states the date format and the person-day unit.
-- Nothing is persisted: the project lives in `useState` and a reload starts from `emptyProject`.
-- The wizard is a scaffold with no agent behind it — the marked comment block in `onSubmit` is the seam, and submitting only writes "Not connected to an agent yet." to the status line.
-- `PageHeader` takes an optional `nav` beside its actions and exports `HeaderLink` for it, which is how `/` links to the wizard and the wizard links back.
-- `tests/unit/project.test.ts` covers the rules and `tests/e2e/project-wizard.spec.ts` covers the gate and the submit, neither with a model call.
+### Persistence and auth
 
-## Persistence — `lib/db.ts`, `lib/schema.ts`, `lib/auth-schema.ts`, `drizzle.config.ts`, `drizzle/`
+- `drizzle/` is generated, except that SQLite cannot `ADD` a `NOT NULL` column without a default, so such a migration is hand-edited into a table rebuild that backfills it, as `0004` does.
+- Mastra creates and owns its `mastra_*` tables in the same SQLite file; they are not in `lib/schema.ts` and `db:generate` must not try to manage them.
+- The driver is `drizzle-orm/libsql/node`; do not install `better-sqlite3`.
+- Every plugin that adds tables (`deviceAuthorization`, `jwt`, `mcp`, `cimd`) must be in `lib/auth-cli.ts`'s plugin array too, or its tables drop out of the next `auth:generate`.
+- There is deliberately no `proxy.ts`: gate pages server-side with `auth.api.getSession` plus `redirect()`, as `app/page.tsx` does.
+- `mcp()` from `@better-auth/mcp` is the OAuth provider; `@better-auth/oauth-provider` is a dependency only for its client plugin, so never add `oauthProvider()` beside `mcp()`.
+- A new MCP scope has to be listed in `mcpOptions().scopes` and described in `components/oauth-consent.tsx`.
+- `Authorization: Bearer` must carry the signed token from sign-in's `set-auth-token` header, not the raw session token; in tests that is `login().cookies[0].value`, not `login().token`.
 
-- `lib/db.ts` is `server-only` and owns the cached application Drizzle connection; the auth CLI and tests construct separate connections.
-- Table definitions live in `lib/schema.ts` so drizzle-kit and tests can import them without tripping the `server-only` marker.
-- `lib/todo-tools.ts` owns every todo query — `listTodosFor` (optional case-insensitive `instr` filter), `addTodoFor`, `setTodoDoneFor` — which both `createTodoTools(db)` and `/api/todos` call, with the db injected so a test can pass one on a temp file.
-- Lists are ordered by `todos.seq`, a unique insertion counter the INSERT computes itself, because `created_at` is whole seconds and ties would fall back to random UUIDs.
-- `lib/auth-schema.ts` is overwritten wholesale by `auth:generate`, so app tables belong in `lib/schema.ts`, which re-exports it as the one entry point drizzle-kit and the Drizzle adapter read.
-- The driver is `drizzle-orm/libsql/node` over a `file:` URL, and drizzle-kit picks `@libsql/client` on its own — do not install `better-sqlite3`.
-- `drizzle/` is generated (edit the schema and re-run `db:generate`), except that SQLite cannot `ADD` a `NOT NULL` column without a default, so such a migration must be hand-edited into a table rebuild that backfills it as `0004` does.
-- The SQLite file under the git-ignored `data/` is disposable — recreate it with `db:migrate`.
+### Agent and CopilotKit
 
-## Auth — `lib/auth.ts`, `lib/auth-config.ts`, `lib/auth-client.ts`, `app/api/auth/[...all]/`
+- `@copilotkit/react-core/v2` and `@copilotkit/runtime/v2` (`createCopilotRuntimeHandler`) are the only surfaces that work here; `@copilotkit/react-ui`, the package roots, and the Express/Hono adapters are v1.
+- CopilotKit questions go through the `copilotkit` skill, which sends you to the `copilotkit-docs` MCP server in `.mcp.json`; Mastra questions through the `mastra` skill.
+- Mastra memory is durable in SQLite, but the default `InMemoryAgentRunner` also keeps a bounded replay cache that can restore the browser transcript until eviction or restart — do not mistake either for the other when debugging.
 
-- `lib/auth-config.ts` exports `authOptions(db)`, which every entry point that needs plugins spreads with its own literal `plugins` array to preserve inference of plugin helpers such as `ctx.test`.
-- `authOptions` rethrows the SQLite cause of Drizzle's `Failed query` insert errors, because Better Auth only recognizes a lost unique-insert race (such as the OAuth provider seeding `oauth_resource` at startup in parallel processes) from the top-level error.
-- `lib/auth.ts` is the app instance (explicitly `server-only`, `nextCookies()` last); `lib/auth-cli.ts` exists only because the Better Auth CLI refuses to load a module graph containing `server-only`, and it drops the Drizzle adapter because the OAuth provider queries its tables during init.
-- Gate pages server-side with `auth.api.getSession({ headers: await headers() })` and `redirect()`; there is deliberately no `proxy.ts`, whose cookie check would not validate anything.
-- Email/password only: when an auth change changes the schema, regenerate it and generate and apply the migration.
-- `lib/auth.ts` adds `bearer({ requireSignature: true })`, so `Authorization: Bearer` must carry the signed token from sign-in's `set-auth-token` header (what test-utils `login().cookies[0].value` holds), not the raw `login().token`.
-- `deviceAuthorization(deviceAuthorizationOptions)` serves `ai-tutor login` and accepts only `CLI_CLIENT_ID`; add it to every entry point's plugin array, including `lib/auth-cli.ts`, or its `device_code` table drops out of the next `auth:generate` — the same holds for `jwt()`, `mcp(mcpOptions(…))` and `cimd(cimdOptions)`.
-- `/device/token` answers with the raw session token, which the bearer plugin refuses, so the `hooks.after` in `authOptions` sets the session cookie there and the bearer plugin replies with the signed `set-auth-token` the CLI stores.
-- `app/device/page.tsx` is the approval page: it sends signed-out users to `/login?redirect=…`, which `app/login/page.tsx` follows only for same-origin paths, and `components/device-approval.tsx` walks verify → approve/deny.
-- `lib/auth-client.ts` carries `oauthProviderClient()`, which adds the signed query of a page reached from `/oauth2/authorize` to every POST, so sign-in on `/login` answers with the next OAuth step (which the client navigates to, and the login page must not override) and consent on `/consent` with the redirect back to the client.
+### Styling
 
-## Todo REST API — `packages/api-contract/`, `lib/api-route.ts`, `app/api/todos/`
+- Read `.agents/skills/ai-tutor-design/SKILL.md` before touching anything visual, and update it in the same change set when a rule changes.
+- `Source_Sans_3` at 400/600 is the only face loaded, so there is no `font-mono` utility to reach for.
+- The chat's composer, send button and radii are hardcoded CopilotKit utilities that `globals.css` overrides by hand; after a CopilotKit upgrade, a pill-shaped composer means the overrides no longer match.
 
-- `ai-tutor-api-contract` holds the zod request/response schemas, the `mcpTools` definitions (name, description, schemas) both MCP servers register, and `CLI_CLIENT_ID`, exports its TypeScript source directly (Turbopack transpiles workspace packages, esbuild bundles it into the CLI), and must stay free of `server-only`, the db, and Better Auth.
-- `GET /api/todos?q=` accepts the session cookie or a bearer token, while `POST /api/todos` and `PATCH /api/todos/[id]` go through `bearerSession`, which drops cookies so the browser still cannot write outside the agent.
+### Tests
 
-## Agent — `lib/tutor.ts`, `components/chat.tsx`, `app/api/copilotkit/[...all]/`
+- Vitest only picks up `tests/{unit,integration}/**/*.test.{ts,tsx}` and cannot render async Server Components, so cover those with e2e.
+- Vitest does not load `.env`: tests stub `DATABASE_URL`/`BETTER_AUTH_*` onto temp files, and `server-only` resolves to its throwing build outside Next.js, so modules that import it are loaded under `vi.mock("server-only", () => ({}))`.
+- `tests/e2e/*.spec.ts` hit `data/app.db`, so they sign up `Date.now()`-stamped emails; `*.llm.spec.ts` is ignored unless `E2E_LLM` is set.
+- The token-verified path of `/api/mcp` needs the app's own JWKS over HTTP, so it has no unit test; `tests/integration/cli.test.ts` is the one place a real `next dev` is exercised from Vitest.
 
-- `lib/tutor.ts` is the whole agent: one `Agent` (`TUTOR_AGENT_ID`, a butler who only keeps the user's to-do list) on `openrouter/z-ai/glm-5.3-flash`, held on a `Mastra` instance.
-- The tutor caches `LibSQLStore` on `globalThis` in every environment and `Mastra` only in production, so development reloads pick up edited instructions without opening another storage connection.
-- Mastra's model router reads `OPENROUTER_API_KEY` itself, so no AI SDK provider is a direct dependency and the model id keeps its `provider/vendor/model` shape.
-- Memory is `@mastra/memory` over a `LibSQLStore` on `DATABASE_URL`; the same store is passed to the `Mastra` instance too, or Mastra warns and falls back to a non-durable in-memory store.
-- Mastra creates and owns its `mastra_*` tables in that file — they are not in `lib/schema.ts` and `db:generate` must not try to manage them.
-- The route builds the AG-UI bridge per request with `MastraAgent.getLocalAgent({ resourceId: session.user.id })`, so memory is scoped by the verified user id and never by anything in the request.
-- The same route hands the todo tools that id through `requestContext`, and todo reads and updates filter on it while inserts assign it — the AG-UI bridge forwards client context under a separate `ag-ui` key, so `userId` cannot be overwritten from the wire.
-- Each tool declares `requestContextSchema`, so a call arriving without a `userId` returns a validation error object instead of throwing or running unscoped.
-- Thread ids are `tutor:<userId>` (`tutorThreadId`), rendered into the page from the session so a reload rejoins the same conversation; Mastra rejects running a stored thread under another resource with `AGENT_MEMORY_THREAD_RESOURCE_MISMATCH`, which does not itself authorize CopilotKit's in-memory replay endpoints.
-- The route session-gates GET and POST before creating the bridge or invoking the runtime, but its static tutor import initializes Mastra before the handler runs.
-- Use `createCopilotRuntimeHandler` from `@copilotkit/runtime/v2`, not the Express or Hono adapters.
-- CopilotKit answers come from the `copilotkit` skill, which carries no API detail itself and sends you to the `copilotkit-docs` MCP server registered in `.mcp.json`.
-- `@copilotkit/react-core/v2` is the whole client surface (`CopilotKit`, `CopilotChat`, `styles.css`) — `@copilotkit/react-ui` and the package roots are v1 and do not work with it.
-- The CopilotKit Inspector is on by default in development (`enableInspector` stays unset; `showDevConsole` is deprecated and controls nothing). Its `<cpk-web-inspector>` launcher would sit on the header's sign-out button, so `app/globals.css` shifts the host down with a margin.
-- `OPENROUTER_BASE_URL` (optional, see `.env.example`) routes the model traffic through a local proxy; with a custom `url` Mastra's model router no longer reads `OPENROUTER_API_KEY` itself, which is why `lib/tutor.ts` passes `apiKey` explicitly.
-- Mastra memory is durable in SQLite; the default `InMemoryAgentRunner` also keeps a shared bounded replay cache that can restore the browser transcript until eviction or server restart.
-- `@copilotkit/runtime` drags in a zod-3 dependency tree while Better Auth is on zod 4, which npm resolves by nesting the zod 3 copy under `@copilotkit/runtime/node_modules` — no `.npmrc` or `--legacy-peer-deps` is involved.
+### CLI
 
-## CLI — `cli/`
+- The `--help` text is the CLI's only documentation and is written for agents too, so change it alongside any behavior.
+- `.agents/skills/ai-tutor-cli/SKILL.md` (and its `.claude/skills/` copy) only says when to reach for the CLI; update it when a command is added, renamed, or removed.
 
-- Built with commander and bundled by esbuild into `cli/dist/` (git-ignored) with `commander`, `zod` and `@modelcontextprotocol/server` left external; `cli/bin/ai-tutor.js` is checked in so npm can link the binary before `prepare` has built anything.
-- `cli/src/todos.ts` holds the todo calls both the commands and the MCP tools use, resolving the server and reading the stored login on every call.
-- The `--help` text is the CLI's only documentation and is written for agents too, so change it alongside any behavior: environment, token file, output formats, and exit codes (4 means log in) all live there.
-- `.agents/skills/ai-tutor-cli/SKILL.md` (Claude copy under `.claude/skills/`) only says when to reach for the CLI and defers to `--help`, so update it when a command is added, renamed, or removed.
-- The server is `AI_TUTOR_URL` (default `http://localhost:3000`); the signed token is stored per server in `hosts.json` under `AI_TUTOR_CONFIG_DIR`, else `$XDG_CONFIG_HOME/ai-tutor`, `%AppData%\ai-tutor`, or `~/.config/ai-tutor`, with the directory at 0700 and the file at 0600.
-- Better Auth's device and session response shapes are declared in `cli/src/auth.ts` because they are not the app's contract; todo shapes always come from `ai-tutor-api-contract`.
-- `ai-tutor mcp --stdio` (`cli/src/mcp.ts`, MCP TypeScript SDK v2 `serveStdio`) registers the contract's `mcpTools`, so their `.describe()` text is what a model reads, and a thrown `CliError` becomes an `isError` result.
-- In that mode stdout is the JSON-RPC channel, so nothing on its path may print; `docs/mcp.md` covers registering it and the HTTP server with Claude Code.
+### Secrets
 
-## MCP over HTTP — `app/api/mcp/`, `lib/mcp-server.ts`, `app/consent/`, `app/.well-known/`
-
-- `lib/mcp-server.ts` builds an `McpServer` with the contract's `mcpTools` over `lib/todo-tools.ts` for one fixed user id, and the route builds one per request with `createMcpHandler`.
-- The route exports only `POST`, wrapped in `requireMcpAuth`, which verifies the JWT against `/api/auth/jwks` for issuer `<BETTER_AUTH_URL>/api/auth`, audience `<BETTER_AUTH_URL>/api/mcp` and scope `todos`, and answers anything else with a 401 `WWW-Authenticate` challenge.
-- The user id is the verified token's `sub`, handed to the server factory as `authInfo.extra.userId`; the SDK never fills `authInfo` from headers, so nothing else in the request can pick the user.
-- It keeps the SDK's default `legacy: "stateless"` rather than Better Auth's recommended `"reject"`, so Claude Code's MCP SDK 1.x runtime (2025-11-25) still connects beside the 2026-07-28 one.
-- `mcp()` from `@better-auth/mcp` is the OAuth provider (never add `oauthProvider()` too), `jwt()` supplies its signing keys, and `cimd()` lets clients such as Claude Code use their metadata document URL as `client_id`, so dynamic client registration stays off.
-- `mcpOptions(baseURL)` derives the resource from `BETTER_AUTH_URL` and throws without it, so every server that loads `lib/auth.ts`, test servers included, must set it.
-- Better Auth answers both discovery documents itself, but at the path-inserted locations outside `/api/auth`, so `app/.well-known/oauth-protected-resource/api/mcp` and `app/.well-known/oauth-authorization-server/api/auth` just hand the request to `auth.handler`.
-- `app/consent/page.tsx` gates on the session and shows the client (named by its own metadata, so the `client_id` URL is displayed too), the redirect URI and the scopes before `authClient.oauth2.consent`.
-- A resource-scoped scope must be listed in `mcpOptions().scopes` and described in `components/oauth-consent.tsx`; `offline_access` is not requested by the challenge because MCP clients add it themselves when the server advertises it.
-
-## MCP App views — `mcp-apps/`, `scripts/build-views.mjs`, `lib/mcp-app-views.ts`
-
-- A view is a folder `mcp-apps/<name>/` with an `index.html` entry beside whatever it imports, and `npm run build:views` bundles each one into a single self-contained `mcp-apps/dist/<name>.html`.
-- One file is the requirement, not a preference: the host serves a view from a `ui://` resource into a sandboxed iframe with a default-deny CSP, so the page never gets a second request and anything left un-inlined is gone.
-- The script drives Vite's JS API with `configFile: false`, because a `vite.config.*` at the repository root would also be picked up by Vitest, which has its own config.
-- It runs one build per view: several inputs in one Rollup build emit shared chunks that the pages then import, which is exactly the second request the sandbox refuses.
-- `predev` and `prebuild` call it, but `next dev` does not watch `mcp-apps/`, so re-run `npm run build:views` by hand after editing a view.
-- `lib/mcp-app-views.ts` is `server-only`, and its `readView(name)` returns one built file, rejects a name outside `[a-z0-9-]+` before it reaches the filesystem, and names the build command when the file is missing.
-- `mcp-apps/dist/` is git-ignored, which also keeps Biome off the bundle because `biome.json` reads the VCS ignore file.
-- `@modelcontextprotocol/ext-apps` 2.x is a root dependency while `@copilotkit/react-core` nests its own 1.7.5; `npm ls @modelcontextprotocol/ext-apps` shows both and neither shadows the other.
-- `.agents/skills/add-app-to-server/SKILL.md` (Claude copy under `.claude/skills/`) is the SDK's own guide to serving a view from an MCP server, so read it before wiring a view to a tool — its build-pipeline section describes a standalone server and is superseded here by the two bullets above.
-
-## Tests — `tests/unit`, `tests/integration` (Vitest), `tests/e2e` (Playwright)
-
-- Vitest is jsdom + Testing Library and only picks up `tests/{unit,integration}/**/*.test.{ts,tsx}`; async Server Components are unsupported there, so cover those with e2e instead.
-- `vitest.config.mts` resolves `@/*` through Vite's native `resolve.tsconfigPaths`, so no `vite-tsconfig-paths` plugin is needed.
-- Playwright runs Chromium only against its own `next dev` on port 3100 (override with `E2E_PORT`).
-- `next dev` refuses to start twice against one dist dir, so `next.config.ts` reads `NEXT_DIST_DIR` and the e2e and CLI test servers set it to `.next-e2e` and `.next-cli-test`; each dir also needs a `tsconfig.json` include entry, which `next dev` adds itself (and reformats the file, so run `npm run format` after).
-- The `.test.ts` files in `tests/unit` select the node environment, while `todo-tool-calls.test.tsx` uses jsdom; the db, auth, tutor, and todos-api tests point at a temp file, so they never touch `data/app.db`.
-- The auth test builds its own instance from `authOptions` with the `testUtils()` plugin and an explicit `secret`/`baseURL`, because Vitest does not load `.env`.
-- `tests/e2e/auth.spec.ts` does hit `data/app.db`, so it signs up a `Date.now()`-stamped email; `playwright.config.ts` also overrides `BETTER_AUTH_URL` onto its own port.
-- `tests/unit/mcp-route.test.ts` imports the real MCP and discovery routes like the todos API test and covers the 401 challenge and both metadata documents; the token-verified path needs the app's own JWKS over HTTP, so it has no unit test.
-- `tests/unit/mcp-app-views.test.ts` passes `readView` a temp directory, so it never depends on whether `npm run build:views` has run.
-- `tests/unit/auth.test.ts` also starts several MCP-configured instances on one fresh file at once to guard the `oauth_resource` seed race.
-- `tests/unit/copilotkit-route.test.ts` mocks `@/lib/auth`, `@/lib/tutor`, and both CopilotKit/AG-UI modules, so it covers the 401 gate and the `resourceId`/`requestContext` wiring without a model call.
-- `tests/unit/todos-api.test.ts` imports the real route handlers with `server-only` mocked and `DATABASE_URL`/`BETTER_AUTH_*` stubbed onto a temp file, and mints tokens from a separate testUtils instance sharing that secret.
-- `tests/unit/todo-tools.test.ts` runs the real executors against a migrated temp database; `createTool` types `execute` as optional and unions in a validation error, so its `run` helper casts once rather than at every call.
-- `tests/e2e/todos.llm.spec.ts` is the only test that calls OpenRouter, so `playwright.config.ts` ignores `*.llm.spec.ts` unless `E2E_LLM` is set — `npm run test:e2e:llm`, not `npm run test:e2e`.
-- The chat composer sends on Enter and inserts a newline on Shift+Enter; e2e submits with `getByTestId("copilot-send-button")`.
-- `tests/integration/cli.test.ts` builds the CLI, starts `next dev` on a spare port with `NEXT_DIST_DIR=.next-cli-test` over a temp database, redirects `XDG_CONFIG_HOME`/`HOME`, and approves the device code through a testUtils instance sharing the server's secret.
-- Its MCP test lives in that file to share the one server, drives `mcp --stdio` with `@modelcontextprotocol/client`, and taps the child's stdout itself because the SDK's reader silently skips lines that are not JSON.
-- `tests/unit/tutor.test.ts` mocks `server-only` (which otherwise resolves to its throwing build) and re-imports `lib/tutor` under `vi.resetModules()` to cover that reload split in both `NODE_ENV`s.
-
-## Styling — `app/globals.css`, `postcss.config.mjs`
-
-- The design system is `.agents/skills/ai-tutor-design/SKILL.md`, with a Claude copy under `.claude/skills/`; read it before touching anything visual, and update it in the same change set when a rule here changes.
-- Tailwind v4 has no `tailwind.config.*`: the static ramp is a plain `@theme` block in `globals.css`, and the semantic roles are `@theme inline` aliases of `:root` custom properties that the `prefers-color-scheme` block re-points, so components carry almost no `dark:` classes.
-- `Source_Sans_3` at weights 400/600 is the only face loaded, so there is no `--font-mono` and no `font-mono` utility to reach for.
-- The chat's own theme is bridged onto those roles under `:root [data-copilotkit]`; `:root` is there only to outrank its `[data-copilotkit].dark` rules, whose class this app never sets.
-- Its composer, send button and radii are hardcoded utilities rather than tokens, so `globals.css` overrides them by hand — a CopilotKit upgrade can silently restore the rounded white default, and the giveaway is a pill-shaped composer.
-- Percentage heights collapse under `<main>` because its height comes from stretching: the chat column is sized by flex the whole way down instead.
-
-## Secrets — `.env`
-
-- Holds `DATABASE_URL` (SQLite, read by both `lib/db.ts` and drizzle-kit, which loads `.env` itself), `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` read by Better Auth itself, and `OPENROUTER_API_KEY`, which Mastra's model router reads directly.
-- `.gitignore` covers `.env*` except `.env.example`; never commit the file or print its values.
-
-## Tooling — `biome.json`
-
-- Biome ignores `.claude/` and `.agents/` because their vendored skill assets fail `biome check .`, `drizzle/` because drizzle-kit's generated JSON does not match its formatter, and `public/` because Biome lints SVGs and the create-next-app artwork has no `<title>`.
-- `npm run format` skips assist actions such as import sorting; use `npx biome check --write <path>` to fix those.
+- `.env` holds `DATABASE_URL`, `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL`, and `OPENROUTER_API_KEY` (see `.env.example`); never commit it or print its values.
 
 ## Maintenance — for you, the agent
 
 - Update this file in the same change set whenever a change invalidates a line here or teaches a costly lesson.
-- Prefer deleting over adding and pointers over prose; drop anything a reader would learn just by opening the file a bullet points to.
-- One sentence per bullet, current state only, no history or changelog.
-- `.tours/use-render-tool.tour` (the CodeTour the README points at) anchors by line number into `app/page.tsx`, `lib/todo-tools.ts`, `lib/tutor.ts`, the CopilotKit route, three `components/` files and `tests/unit/todo-tool-calls.test.tsx`, so re-check its `line` values when those statements move.
-- `.tours/mcp-app-views.tour` (the second one) anchors the same way into `package.json`, `scripts/build-views.mjs`, the three `mcp-apps/todo-form/` files, `lib/mcp-app-views.ts`, `.gitignore` and `tests/unit/mcp-app-views.test.ts`.
+- Keep it a map plus non-obvious traps: anything a reader learns by opening the file a line points to belongs in that file's comments, not here.
+- One sentence per bullet, current state only, no history.
+- The two `.tours/*.tour` files anchor by line number into the files they name (`app/page.tsx`, `lib/tutor.ts`, `lib/todo-tools.ts`, the CopilotKit route, `components/`, `scripts/build-views.mjs`, `lib/mcp-app-views.ts`, `mcp-apps/todo-form/`, `package.json`, `.gitignore`, and their tests), so re-check `line` values when those statements move.
